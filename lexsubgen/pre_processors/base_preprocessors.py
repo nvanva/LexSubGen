@@ -1,6 +1,6 @@
 import string
 from typing import List, Tuple, Optional
-
+import re
 from overrides import overrides
 
 PADDING_TEXT = (
@@ -118,6 +118,42 @@ class TitlePreprocessor(Preprocessor):
             sentence[0] = sentence[0].title()
             transformed_sentences.append(sentence)
         return transformed_sentences, target_ids
+
+class SimpleDetokPreprocessor(Preprocessor):
+    def __init__(self):
+        """
+        Preprocessor detokenizes inputs, so that sentence piece and similar models won't tokenize punctuation marks as having spaces before them.
+        Currently handles only few frequent cases. Better detokenization is required.
+        """
+        super().__init__()
+
+    @overrides
+    def transform(
+        self, sentences: List[List[str]], target_ids: List[int]
+    ) -> Tuple[List[List[str]], List[int]]:
+        """
+        Removes spaces before punctuation marks, except for opening brackets and quotes. 
+        Args:
+            sentences: list of sentences which are represented as a token sequence
+            target_ids: indexes of target word in sentence
+
+        Returns:
+            transformed sentences list and new target indexes
+        """
+        transformed_sentences = []
+        transformed_target_ids = []
+        pat = re.compile(r" ([.,?!:;\)'])|(\() ")
+        for sentence, target_id in zip(sentences, target_ids):
+            left_ctx, target, right_ctx = ' '.join(sentence[:target_id]), sentence[target_id], ' '.join(sentence[target_id+1:])
+            res = []
+            if left_ctx:
+                res.append(pat.sub(r'\1\2',left_ctx))
+            res.append(target)
+            if right_ctx:
+                res.append(pat.sub(r'\1\2',right_ctx))
+            transformed_sentences.append(res)
+            transformed_target_ids.append(1 if target_id > 0 else 0)  # 0 if no left context, 1 otherwise
+        return transformed_sentences, transformed_target_ids
 
 
 class AndPreprocessor(Preprocessor):
